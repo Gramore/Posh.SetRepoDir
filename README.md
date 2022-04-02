@@ -11,7 +11,7 @@ $Env:POSH_GitIgnoreDirs = @()
 
 Run the following:
 ```posh
-Set-ExecutionPolicy Bypass -Scope Process -Force;.\build.ps1
+Set-ExecutionPolicy Bypass -Scope Process -Force;.\install.ps1
 ```
 
 Please note that the install script will not work if you have previously installed the module as your powershell session will keep a lock on the DLL
