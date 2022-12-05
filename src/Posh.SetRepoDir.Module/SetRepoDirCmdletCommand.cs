@@ -9,27 +9,35 @@ namespace Posh.SetRepoDir.Module
     [Cmdlet(VerbsCommon.Set, "RepoDir")]
     public class SetRepoDirCmdletCommand : PSCmdlet
     {
+        private static Dictionary<string, string>? _validDirs;
+        public static string? PrimaryRoot { get; private set; }
+        public static Dictionary<string, string>? ValidDirs => _validDirs ??= GetValidDirs();
 
-        private static Dictionary<string, string> _validDirs;
-        public static Dictionary<string, string> ValidDirs => _validDirs ??= GetValidDirs();
-
-        [Parameter(Mandatory = true, Position = 0)]
+        [Parameter(Mandatory = false, Position = 0)]
         [ValidateSet(typeof(ValidFileNameGenerator))]
-        public string DirectoryName { get; set; }
+        public string? DirectoryName { get; set; }
 
         protected override void BeginProcessing()
         {
-            WriteVerbose($"Valid dirs: {ValidDirs.Keys}");
+            WriteVerbose($"Valid dirs: {ValidDirs?.Keys}");
         }
 
         protected override void ProcessRecord()
-            => SessionState.Path.SetLocation(ValidDirs[DirectoryName]);
+        {
+            if (ValidDirs is null ) return;
 
-        private static Dictionary<string, string> GetValidDirs()
+            var location = DirectoryName is not null ? ValidDirs[DirectoryName] : PrimaryRoot!;
+            
+            SessionState.Path.SetLocation(location);
+        }
+
+        private static Dictionary<string, string>? GetValidDirs()
         {
             var rootDirs = Environment.GetEnvironmentVariable("POSH_GitRootDirs")?.Split(' ');
             if (rootDirs is null)
                 return null;
+
+            PrimaryRoot = rootDirs.First();
 
             var ignoreDirs = Environment.GetEnvironmentVariable("POSH_GitIgnoreDirs")?.Split(' ') ??
                              Array.Empty<string>();
@@ -44,7 +52,7 @@ namespace Posh.SetRepoDir.Module
 
     public class ValidFileNameGenerator : IValidateSetValuesGenerator
     {
-        public string[] GetValidValues() 
-            => SetRepoDirCmdletCommand.ValidDirs.Keys.ToArray();
+        public string[]? GetValidValues() 
+            => SetRepoDirCmdletCommand.ValidDirs?.Keys.ToArray();
     }
 }
