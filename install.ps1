@@ -1,9 +1,25 @@
+param(
+    [switch] $ReInstall,
+    [switch] $Confirm
+)
+
 $module = "Set-RepoDir"
 $docsDir = [Environment]::GetFolderPath("MyDocuments")
 $outPath = "$docsDir\PowerShell\Modules\Set-RepoDir"
 $binOutPath = "$outPath\bin"
 
-if(Test-Path "$binOutPath/$module.dll"){
+if(($ReInstall) -and (!($Confirm))){
+    $title    = 'Set-RepoDir re-install'
+    $question = 'This process will close your powershell session, are you sure you want to proceed?'
+    $choices  = '&Yes', '&No'
+
+    $decision = $Host.UI.PromptForChoice($title, $question, $choices, 1)
+    if ($decision -ne 0) {
+        return
+    }
+}
+
+if((!($ReInstall)) -and (Test-Path "$binOutPath/$module.dll")){
     Write-Host "You already have a copy of $module installed, we won't be able to automatically move the dll."
     $path = Get-Item out/bin/Posh.SetRepoDir.Module.dll
     Write-host "You can still manually perform the following move: `n$path -> $binOutPath\$module.dll"
@@ -26,10 +42,20 @@ $manifestSplat = @{
     Company           = "None"
     NestedModules     = @("bin\$module.dll")
     RootModule        = "$module.psm1"
-    FunctionsToExport = @('Set-RepoDir')
+    FunctionsToExport = @('Set-RepoDir','Get-RepoDesc')
 }
 New-ModuleManifest @manifestSplat
 Pop-Location
 
 Set-Content -Value '' -Path "$outPath\$module.psm1"
-Copy-Item out/bin/Posh.SetRepoDir.Module.dll "$binOutPath\$module.dll" -Force -ErrorAction Ignore | Out-Null
+
+if($ReInstall){
+    $path = Get-Item out/bin/Posh.SetRepoDir.Module.dll
+    $cmd = "(%systemroot%\System32\timeout.exe /t 2 /nobreak)>nul && cp $path $binOutPath\$module.dll && exit"
+    Start-Process cmd -Argument ('/k "{0}"' -f $cmd) #-WindowStyle Hidden
+    Get-Process pwsh | Stop-Process
+}else{
+    Copy-Item out/bin/Posh.SetRepoDir.Module.dll "$binOutPath\$module.dll" -Force -ErrorAction Ignore | Out-Null   
+}
+
+
