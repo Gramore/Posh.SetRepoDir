@@ -8,7 +8,6 @@ namespace Posh.SetRepoDir.Module;
 
 public class ValidFileNameGenerator : IValidateSetValuesGenerator
 {
-    private static readonly Dictionary<string, string> _aliases;
     public static readonly string? PrimaryRoot;
     public static readonly Dictionary<string, string> ValidDirs;
     
@@ -18,7 +17,6 @@ public class ValidFileNameGenerator : IValidateSetValuesGenerator
         if (rootDirs is null || !rootDirs.Any())
         {
             ValidDirs = new Dictionary<string, string>();
-            _aliases = new Dictionary<string, string>();
             return;
         }
 
@@ -29,45 +27,67 @@ public class ValidFileNameGenerator : IValidateSetValuesGenerator
                              
         var aliases = Environment.GetEnvironmentVariable("POSH_GitAliases")?.Split(' ') ??
                       Array.Empty<string>();
+        
+        var manualRepos = Environment.GetEnvironmentVariable("POSH_GitManualRepos")?.Split(' ') ??
+                         Array.Empty<string>();
             
-        _aliases = PopulateAliases(aliases);
+        var resolvedAliases = PopulateAliases(aliases);
             
-        ValidDirs = GetValidDirs(rootDirs,ignoreDirs);
+        ValidDirs = GetValidDirs(rootDirs,ignoreDirs, manualRepos, resolvedAliases);
     }
     
     public string[]? GetValidValues() 
         => ValidDirs?.Keys.ToArray();
     
-    private static Dictionary<string, string> GetValidDirs(IEnumerable<string> rootDirs, string[] ignoreDirs)
+    private static Dictionary<string, string> GetValidDirs(
+        IEnumerable<string> rootDirs,
+        string[] ignoreDirs,
+        string[] manualRepos, 
+        List<Alias> resolvedAliases)
     {
         var validDirs =  rootDirs
             .SelectMany(Directory.GetDirectories)
             .Select(directory => (name: directory.Split('\\').TakeLast(1).Single(), directory))
             .Where(d => !ignoreDirs.Contains(d.name))
             .ToDictionary(d => d.name, d => d.directory);
-            
-        var aliases = _aliases.Where(a => validDirs.ContainsKey(a.Key))
-            .Select(a => (ignoreDir: validDirs[a.Key], alias: a))
-            .ToDictionary(k => k.alias.Value, k => k.ignoreDir);
+        
+        foreach (var repo in manualRepos.Select(path =>
+                 {
+                     var name = new DirectoryInfo(path).Name;;
+                     return (name, path);
+                 }))
+            _ = validDirs.TryAdd(repo.name, repo.path);
 
-        foreach (var (key, value) in aliases)
-            _ = validDirs.TryAdd(key, value);
+        var aliases = resolvedAliases
+            .Where(a => validDirs.ContainsKey(a.Source))
+            .Select(a => (alias: a,ignoreDir: validDirs[a.Source]));
+
+        foreach (var (a, dir) in aliases)
+        {
+            if (a.Overwrite)
+                validDirs.Remove(a.Source);
+            _ = validDirs.TryAdd(a.Name, dir);
+        }
 
         return validDirs;
     }
         
-    private static Dictionary<string, string> PopulateAliases(IEnumerable<string> aliases)
-    {
-        return aliases
-            .Select(ToPair)
-            .ToDictionary(d => d.Key, d => d.Value);
-    }
-    
-    private static (string Key, string Value) ToPair(string alias)
-    {
-        var parts = alias.Trim().Split(":");
-        return parts.Length != 2 ? (string.Empty, string.Empty) : (parts[0], parts[1]);
-    }
+    private static List<Alias> PopulateAliases(IEnumerable<string> aliases) 
+        => aliases
+            .Select(a =>
+            {
+                var parts = a.Trim().Split(":");
+                return parts switch
+                {
+                    [{ } p1, { } p2] =>  new Alias(p1,p2,false),
+                    [{ } p1, { } p2, {} p3] =>  new Alias(p1,p2,p3 is "overwrite"),
+                    _ => new Alias(string.Empty,string.Empty,false)
+
+                };
+            })
+            .ToList();
+
+    private record struct Alias(string Source,string Name, bool Overwrite);
 }
 
 

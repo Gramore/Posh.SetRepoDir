@@ -51,7 +51,7 @@ Set-Content -Value '' -Path "$outPath\$module.psm1"
 
 if($ReInstall){
     $path = Get-Item out/bin/Posh.SetRepoDir.Module.dll
-    $cmd = "(%systemroot%\System32\timeout.exe /t 2 /nobreak)>nul && cp $path $binOutPath\$module.dll && exit"
+    $cmd = "(%systemroot%\System32\timeout.exe /t 2 /nobreak)>nul && copy $path $binOutPath\$module.dll && exit"
     Start-Process cmd -Argument ('/k "{0}"' -f $cmd) #-WindowStyle Hidden
     Get-Process pwsh | Stop-Process
 }else{
